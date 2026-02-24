@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>空洞骑士：丝之歌 怪物筛选器 (丝之歌版)</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { max-width: 1200px; margin: 20px auto; padding: 20px; background: #f5f5f5; color: #333; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .drop-zone {
+            border: 3px dashed #7f8c8d;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background: #ecf0f1;
+            color: #34495e;
+            font-size: 18px;
+            cursor: pointer;
+            margin: 20px 0;
+            transition: all 0.3s;
+        }
+        .drop-zone.dragover { border-color: #3498db; background: #d6eaf8; }
+        .drop-zone:hover { background: #d5dbdb; }
+        .result-area { margin-top: 30px; display: none; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        th, td { border: 1px solid #bdc3c7; padding: 12px 15px; text-align: left; }
+        th { background: #3498db; color: white; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        .download-btn {
+            margin-top: 20px;
+            padding: 12px 25px;
+            background: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .download-btn:hover { background: #27ae60; }
+        #loading, #error { padding: 15px; text-align: center; font-size: 16px; margin: 10px 0; border-radius: 5px; }
+        #loading { background: #d5f4e6; color: #27ae60; }
+        #error { background: #fadbd8; color: #c0392b; }
+        .stats { font-size: 16px; margin: 15px 0; color: #7d3c98; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>空洞骑士：丝之歌 怪物筛选器</h1>
+    <p>此工具专为直接读取 <code>silk.txt</code> 完整存档设计。将您的存档文件拖放到下方区域，即可查看所有未解锁的怪物（击杀数不足）。</p>
+    
+    <div class="drop-zone" id="dropZone">
+        <p>📁 将 <strong>silk.txt</strong> 文件拖放到此处</p>
+        <p style="color: #777; font-size: 14px;">或点击此处选择文件</p>
+        <input type="file" id="fileInput" accept=".txt" style="display: none;">
+    </div>
+
+    <div id="loading" style="display: none;">⏳ 正在分析存档数据，请稍候...</div>
+    <div id="error" style="display: none;"></div>
+
+    <div class="result-area" id="resultArea">
+        <div class="stats" id="stats"></div>
+        <table id="resultTable">
+            <thead>
+                <tr>
+                    <th>原始编号</th> <!-- 从“序号”改为“原始编号” -->
+                    <th>中文名</th>
+                    <th>官方英文名</th>
+                    <th>存档内部ID</th>
+                    <th>当前击杀</th>
+                    <th>所需击杀</th>
+                    <th style="color:#e74c3c;">还差</th>
+                </tr>
+            </thead>
+            <tbody id="resultBody"></tbody>
+        </table>
+        <button class="download-btn" id="downloadBtn">💾 下载结果 (TXT)</button>
+    </div>
+
+    <script>
+        // ========== 核心数据：Wiki信息 (中文名 -> 英文名 + 需求击杀数) ==========
+        const wikiData = {
+  "苔藓蠕虫": { "english": " Mossgrub", "requirement": 25 },
+  "大型苔藓蠕虫": { "english": " Massive_Mossgrub", "requirement": 3 },
+  "苔翼虫": { "english": " Mossmir", "requirement": 20 },
+  "苔藓之母": { "english": " Moss Mother", "requirement": 3 },
+  "阿克尼": { "english": " Aknid", "requirement": 15 },
+  "颅潜虫": { "english": " Skull Scuttler", "requirement": 35 },
+  "颅翼虫": { "english": " Skullwing", "requirement": 15 },
+  "颅蛮虫": { "english": " Skull Brute", "requirement": 15 },
+  "颅骨暴君": { "english": " Skull Tyrant", "requirement": 1 },
+  "刺铠虫": { "english": " Kilik", "requirement": 25 },
+  "兽蝇": { "english": " Beastfly", "requirement": 30 },
+  "残暴的兽蝇": { "english": " Savage Beastfly", "requirement": 2 },
+  "刃尾蜂": { "english": " Caranid", "requirement": 25 },
+  "狂躁刃尾蜂": { "english": " Vicious Caranid", "requirement": 15 },
+  "硬骨跳跃者": { "english": " Hardbone Hopper", "requirement": 20 },
+  "硬骨长者": { "english": " Hardbone Elder", "requirement": 10 },
+  "焦油螨": { "english": " Tarmite", "requirement": 10 },
+  "卷球幼兽": { "english": " Mawling", "requirement": 30 },
+  "髓渊兽": { "english": " Marrowmaw", "requirement": 8 },
+  "绒棘虫": { "english": " Hoker", "requirement": 15 },
+  "燧甲虫": { "english": " Flintbeetle", "requirement": 3 },
+  "犀角掘地兽": { "english": " Rhinogrund", "requirement": 2 },
+  "戈鲁姆幼虫": { "english": " Gromling", "requirement": 25 },
+  "戈鲁姆": { "english": " Grom", "requirement": 10 },
+  "钟道兽": { "english": " Bell Beast", "requirement": 1 },
+  "伏地朝圣者": { "english": " Pilgrim Groveller", "requirement": 35 },
+  "扑袭朝圣者": { "english": " Pilgrim Pouncer", "requirement": 35 },
+  "角枪朝圣者": { "english": " Pilgrim Hornfly", "requirement": 15 },
+  "壮硕朝圣者": { "english": " Pilgrim Hulk", "requirement": 10 },
+  "朝圣钟卫": { "english": " Pilgrim Bellbearer", "requirement": 10 },
+  "残翼朝圣者": { "english": " Winged Pilgrim", "requirement": 25 },
+  "年迈朝圣者": { "english": " Elder Pilgrim", "requirement": 5 },
+  "有翼朝圣钟卫": { "english": " Winged Pilgrim Bellbearer", "requirement": 10 },
+  "攀山朝圣者": { "english": " Pilgrim Hiker", "requirement": 10 },
+  "引路朝圣者": { "english": " Pilgrim Guide", "requirement": 15 },
+  "苔蚀朝圣者": { "english": " Overgrown Pilgrim", "requirement": 20 },
+  "念珠朝圣者": { "english": " Covetous Pilgrim", "requirement": 2 },
+  "念珠窃贼": { "english": " Snitchfly", "requirement": 4 },
+  "熔岩蛞蝓": { "english": " Lavalug", "requirement": 12 },
+  "成年熔岩蛞蝓": { "english": " Lavalarga", "requirement": 8 },
+  "炼岩工": { "english": " Smelt Shoveller", "requirement": 25 },
+  "燧石飞工": { "english": " Flintstone Flyer", "requirement": 25 },
+  "燧焰飞工": { "english": " Flintflame Flyer", "requirement": 10 },
+  "烟岩筛工": { "english": " Smokerock Sifter", "requirement": 10 },
+  "深潜者": { "english": " Deep Diver", "requirement": 5 },
+  "监工兄弟西格尼斯与格隆": { "english": " Forebrothers Signis & Gron", "requirement": 1 },
+  "小悬峭兽": { "english": " Cragglite", "requirement": 3 },
+  "悬峭兽": { "english": " Craggler", "requirement": 1 },
+  "惊叫虫": { "english": " Brushflit", "requirement": 15 },
+  "拟草虫": { "english": " Fertid", "requirement": 25 },
+  "拟草蛾": { "english": " Flapping Fertid", "requirement": 20 },
+  "第四圣咏团": { "english": " Fourth Chorus", "requirement": 1 },
+  "斯卡尔工蚁": { "english": " Skarrlid", "requirement": 25 },
+  "斯卡尔飞蚁": { "english": " Skarrwing", "requirement": 30 },
+  "斯卡尔斥候": { "english": " Skarr Scout", "requirement": 20 },
+  "斯卡尔追猎者": { "english": " Skarr Stalker", "requirement": 15 },
+  "斯卡尔长矛手": { "english": " Spear Skarr", "requirement": 10 },
+  " 斯卡尔守卫": { "english": " Skarrgard", "requirement": 2 },
+  "被放逐的格尔": { "english": " Gurr the Outcast", "requirement": 1 },
+  "最终之爪": { "english": " Last Claw", "requirement": 6 },
+  "斯卡尔歌后卡梅莉塔": { "english": " Skarrsinger Karmelita", "requirement": 1 },
+  "暗螨": { "english": " Mite", "requirement": 30 },
+  "飞蚀螨": { "english": " Fluttermite", "requirement": 25 },
+  "螨母": { "english": " Mitemother", "requirement": 10 },
+  "灵丝筛工": { "english": " Dreg Catcher", "requirement": 20 },
+  "裁丝疯匠": { "english": " Silk Snipper", "requirement": 25 },
+  "残丝耙工": { "english": " Thread Raker", "requirement": 15 },
+  "荒沼翼主": { "english": " Moorwing", "requirement": 1 },
+  "火灵": { "english": " Wisp", "requirement": 15 },
+  "焚身信徒": { "english": " Burning Bug", "requirement": 8 },
+  "炽焰之父": { "english": " Father of the Flame", "requirement": 1 },
+  "鸦虫": { "english": " Craw", "requirement": 25 },
+  "高鸦虫": { "english": " Tallcraw", "requirement": 20 },
+  "矮鸦虫": { "english": " Squatcraw", "requirement": 15 },
+  "鸦虫陪审员": { "english": " Craw Juror", "requirement": 15 },
+  "高鸦虫陪审员": { "english": " Tallcraw Juror", "requirement": 10 },
+  "矮鸦虫陪审员": { "english": " Squatcraw Juror", "requirement": 8 },
+  "鸦虫教父": { "english": " Crawfather", "requirement": 1 },
+  "淤秽蛆": { "english": " Muckmaggot", "requirement": 80 },
+  "沼蛆": { "english": " Slubberlug", "requirement": 12 },
+  "淤秽蟑螂": { "english": " Muckroach", "requirement": 20 },
+  "浮肿蟑螂": { "english": " Bloatroach", "requirement": 12 },
+  "蟑群牧者": { "english": " Roachcatcher", "requirement": 20 },
+  "蟑螂饲养员": { "english": " Roachfeeder", "requirement": 20 },
+  "蟑螂监管者": { "english": " Roachkeeper", "requirement": 10 },
+  "蟑螂厨师": { "english": " Roachserver", "requirement": 10 },
+  "失格大厨卢戈利": { "english": " Disgraced Chef Lugoli", "requirement": 1 },
+  "丝魂": { "english": " Wraith", "requirement": 10 },
+  "娥叶虫": { "english": " Mothleaf Lagnia", "requirement": 25 },
+  "沼泽螨": { "english": " Miremite", "requirement": 20 },
+  "沼栖飞蚋": { "english": " Swamp Squit", "requirement": 30 },
+  "酸涎飞蚋": { "english": " Spit Squit", "requirement": 20 },
+  "斯提金猎手": { "english": " Stilkin", "requirement": 15 },
+  "斯提金捕手": { "english": " Stilkin Trapper", "requirement": 12 },
+  "伟大的格洛": { "english": " Groal the Great", "requirement": 1 },
+  "巴纳克": { "english": " Barnak", "requirement": 8 },
+  "腐殖吮吸者": { "english": " Ductsucker", "requirement": 6 },
+  "滑水者": { "english": " Pond Skipper", "requirement": 15 },
+  "渔夫": { "english": " Pondcatcher", "requirement": 20 },
+  "壳木蚋虫": { "english": " Shellwood Gnat", "requirement": 15 },
+  "木蜂": { "english": " Wood Wasp", "requirement": 12 },
+  "碎裂者": { "english": " Splinter", "requirement": 12 },
+  "尖角碎裂者": { "english": " Splinterhorn", "requirement": 10 },
+  "裂皮碎裂者": { "english": " Splinterbark", "requirement": 10 },
+  "碎裂者长姊": { "english": " Sister Splinter", "requirement": 1 },
+  "幻形花虻": { "english": " Phacia", "requirement": 25 },
+  "爆粉葵": { "english": " Pollenica", "requirement": 10 },
+  "假面丽花": { "english": " Gahlia", "requirement": 20 },
+  "赛斯": { "english": " Shrine Guardian Seth", "requirement": 1 },
+  "尼莱斯": { "english": " Nyleth", "requirement": 1 },
+  "绒甲虫": { "english": " Furm", "requirement": 25 },
+  "有翼绒甲虫": { "english": " Winged Furm", "requirement": 12 },
+  "纺络蛛": { "english": " Pharlid", "requirement": 20 },
+  "纺络跳蛛": { "english": " Pharlid Diver", "requirement": 10 },
+  "碎甲突袭者": { "english": " Shardillard", "requirement": 3 },
+  "沙噬虫": { "english": " Sandcarver", "requirement": 40 },
+  "蠕行幼虫": { "english": " Squirrm", "requirement": 4 },
+  "裁决者": { "english": " Judge", "requirement": 15 },
+  "末代裁决者": { "english": " Last Judge", "requirement": 1 },
+  "珊瑚绒甲虫": { "english": " Coral Furm", "requirement": 15 },
+  "掷面虫": { "english": " Driznit", "requirement": 25 },
+  "重甲掷面虫": { "english": " Driznarga", "requirement": 14 },
+  "刺螺虫": { "english": " Pokenabbin", "requirement": 16 },
+  "螺蝇": { "english": " Conchfly", "requirement": 8 },
+  "巨型螺蝇": { "english": " Great Conchfly", "requirement": 2 },
+  "珊瑚壳虫": { "english": " Crustcrawler", "requirement": 10 },
+  "珊瑚巨怪": { "english": " Crustcrag", "requirement": 6 },
+  "凯虫": { "english": " Kai", "requirement": 10 },
+  "旋角凯虫": { "english": " Spinebeak Kai", "requirement": 10 },
+  "钢棘凯虫": { "english": " Steelspine Kai", "requirement": 15 },
+  "尤玛": { "english": " Yuma", "requirement": 16 },
+  "尤玛玛": { "english": " Yumama", "requirement": 3 },
+  "卡拉卡": { "english": " Karaka", "requirement": 10 },
+  "卡卡利": { "english": " Kakri", "requirement": 10 },
+  "雅戈": { "english": " Yago", "requirement": 12 },
+  "卡拉卡格": { "english": " Karak Gor", "requirement": 8 },
+  "阿利塔": { "english": " Alita", "requirement": 6 },
+  "珊瑚卡拉卡": { "english": " Corrcrust Karaka", "requirement": 6 },
+  "壳王卡汗": { "english": " Crust King Khann", "requirement": 1 },
+  "边陲守望者": { "english": " Watcher at the Edge", "requirement": 1 },
+  "伏特维姆": { "english": " Voltvyrm", "requirement": 1 },
+  "帷虫": { "english": " Drapefly", "requirement": 30 },
+  "帷虫之主": { "english": " Drapelord", "requirement": 4 },
+  "帷螨": { "english": " Drapemite", "requirement": 20 },
+  "巨型帷螨": { "english": " Giant Drapemite", "requirement": 6 },
+  "圣厂工虫": { "english": " Underworker", "requirement": 15 },
+  "圣厂擦地工": { "english": " Underscrub", "requirement": 20 },
+  "圣厂清扫工": { "english": " Undersweep", "requirement": 10 },
+  "圣厂戳刺工": { "english": " Underpoke", "requirement": 25 },
+  "圣厂投掷工": { "english": " Underloft", "requirement": 25 },
+  "圣厂维修工": { "english": " Undercrank", "requirement": 4 },
+  "圣咏特使": { "english": " Envoy", "requirement": 20 },
+  "圣咏扑袭者": { "english": " Choir Pouncer", "requirement": 30 },
+  "圣咏尖角虫": { "english": " Choir Hornhead", "requirement": 15 },
+  "圣咏钟卫": { "english": " Choir Bellbearer", "requirement": 25 },
+  "圣咏飞虫": { "english": " Choir Flyer", "requirement": 20 },
+  "圣咏长老": { "english": " Choir Elder", "requirement": 6 },
+  "圣咏使徒": { "english": " Choristor", "requirement": 25 },
+  "簧片战士": { "english": " Reed", "requirement": 30 },
+  "精英簧片战士": { "english": " Grand Reed", "requirement": 12 },
+  "圣咏槌手": { "english": " Choir Clapper", "requirement": 3 },
+  "丝偶侍女": { "english": " Clawmaiden", "requirement": 10 },
+  "忆廊使徒": { "english": " Memoria", "requirement": 2 },
+  "圣咏大臣": { "english": " Minister", "requirement": 15 },
+  "圣咏指挥": { "english": " Maestro", "requirement": 6 },
+  "次席戍卫": { "english": " Second Sentinel", "requirement": 1 },
+  "残丝躯壳": { "english": " Dreg Husk", "requirement": 8 },
+  "残丝轮骸": { "english": " Dregwheel", "requirement": 8 },
+  "医师": { "english": " Surgeon", "requirement": 3 },
+  "殡葬师": { "english": " Mortician", "requirement": 10 },
+  "失缚怨魂": { "english": " The Unravelled", "requirement": 1 },
+  "机枢飞工": { "english": " Cogwork Underfly", "requirement": 25 },
+  "机枢搬运工": { "english": " Cogwork Hauler", "requirement": 12 },
+  "机枢巡游者": { "english": " Cogwork Crawler", "requirement": 15 },
+  "机枢工蜂": { "english": " Cogworker", "requirement": 15 },
+  "机枢棘球": { "english": " Cogwork Spine", "requirement": 10 },
+  "机枢咏者": { "english": " Cogwork Choirbug", "requirement": 20 },
+  "机枢清道夫": { "english": " Cogwork Cleanser", "requirement": 12 },
+  "机枢守卫": { "english": " Cogwork Defender", "requirement": 8 },
+  "机枢击钹者": { "english": " Cogwork Clapper", "requirement": 1 },
+  "机枢舞者": { "english": " Cogwork Dancers", "requirement": 1 },
+  "书库之子": { "english": " Vaultborn", "requirement": 20 },
+  "执灯者": { "english": " Lampbearer", "requirement": 20 },
+  "诵经使": { "english": " Scrollreader", "requirement": 15 },
+  "书库管理员": { "english": " Vaultkeeper", "requirement": 10 },
+  "特罗比奥": { "english": " Trobbio", "requirement": 1 },
+  "痛苦的特罗比奥": { "english": " Tormented Trobbio", "requirement": 1 },
+  "悔罪者": { "english": " Penitent", "requirement": 8 },
+  "弱小悔罪者": { "english": " Puny Penitent", "requirement": 6 },
+  "新生蝇": { "english": " Freshfly", "requirement": 20 },
+  "痂蝇": { "english": " Scabfly", "requirement": 15 },
+  "看守蝇": { "english": " Guardfly", "requirement": 10 },
+  "狱卒蝇": { "english": " Wardenfly", "requirement": 8 },
+  "育母": { "english": " Broodmother", "requirement": 1 },
+  "雪精灵": { "english": " Driftlin", "requirement": 20 },
+  "冰晶虫": { "english": " Mnemonid", "requirement": 10 },
+  "巨型冰晶虫": { "english": " Mnemonord", "requirement": 3 },
+  "仆从伊格尼姆": { "english": " Servitor Ignim", "requirement": 8 },
+  "仆从博兰": { "english": " Servitor Boran", "requirement": 5 },
+  "生质飞籽": { "english": " Winged Lifeseed", "requirement": 8 },
+  "生质幼虫": { "english": " Plasmid", "requirement": 15 },
+  "生质蠕虫": { "english": " Plasmidas", "requirement": 6 },
+  "生质异化的赞戈": { "english": " Plasmified Zango", "requirement": 1 },
+  "滑叶虫": { "english": " Leaf Glider", "requirement": 12 },
+  "卷叶虫": { "english": " Leaf Roller", "requirement": 10 },
+  "潘德拉": { "english": " Pendra", "requirement": 10 },
+  "潘德拉戈": { "english": " Pendragor", "requirement": 10 },
+  "拟态睡莲": { "english": " Nuphar", "requirement": 6 },
+  "苜鹿": { "english": " Cloverstag", "requirement": 10 },
+  "苍白苜鹿": { "english": " Palestag", "requirement": 1 },
+  "金达尼尔": { "english": " Kindanir", "requirement": 10 },
+  "维达尼尔": { "english": " Verdanir", "requirement": 10 },
+  "埃斯卡里昂": { "english": " Escalion", "requirement": 10 },
+  "三叶草舞者": { "english": " Clover Dancers", "requirement": 1 },
+  "阴影爬虫 (丝之歌)|阴影爬虫": { "english": " Shadow_Creeper_(Silksong)", "requirement": 16 },
+  "阴影冲锋者": { "english": " Shadow Charger", "requirement": 6 },
+  "幽暗囊": { "english": " Gloomsac", "requirement": 15 },
+  "幽暗巨兽": { "english": " Gargant Gloom", "requirement": 4 },
+  "虚空卷须 (丝之歌)|虚空卷须": { "english": " Void_Tendrils_(Silksong)", "requirement": 1 },
+  "虚空聚合体": { "english": " Void Mass", "requirement": 8 },
+  "虚面救世主": { "english": " Summoned Saviour", "requirement": 1 },
+  "翅膀傀儡 (丝之歌)|翅膀傀儡": { "english": " Wingmould_(Silksong)", "requirement": 10 },
+  "加尔皮德": { "english": " Garpid", "requirement": 30 },
+  "伊莫巴": { "english": " Imoba", "requirement": 4 },
+  "沙行虫": { "english": " Skrill", "requirement": 10 },
+  "噬钟者": { "english": " Bell Eater", "requirement": 1 },
+  "巨蚤": { "english": " Huge Flea", "requirement": 1 },
+  "沙克拉": { "english": " Shakra", "requirement": 1 },
+  "加蒙德和扎扎": { "english": " Garmond & Zaza", "requirement": 1 },
+  "失心加蒙德": { "english": " Lost Garmond", "requirement": 1 },
+  "针姬": { "english": " Pinstress", "requirement": 1 },
+  "黑寡妇": { "english": " Widow", "requirement": 1 },
+  "原初罪者": { "english": " First Sinner", "requirement": 1 },
+  "幽影": { "english": " Phantom", "requirement": 1 },
+  "蕾丝": { "english": " Lace", "requirement": 1 },
+  "崇高圣母灵丝": { "english": " Grand Mother Silk", "requirement": 1 },
+  "失心蕾丝": { "english": " Lost Lace", "requirement": 1 }
+        };
+
+        // ========== 核心数据：映射表 (存档ID -> 官方英文名) ==========
+        const mappingList = [
+    { "Name": "MossBone Crawler", "GameName": "Mossgrub" },
+    { "Name": "MossBone Fly", "GameName": "Mossmir" },
+    { "Name": "Bone Roller", "GameName": "Mawling" },
+    { "Name": "Mossbone Mother", "GameName": "Moss Mother" },
+    { "Name": "Bone Goomba", "GameName": "Skull Scuttler" },
+    { "Name": "Bone Goomba Large", "GameName": "Skull Brute" },
+    { "Name": "Bone Flyer", "GameName": "Beastfly" },
+    { "Name": "Bone Circler", "GameName": "Caranid" },
+    { "Name": "Bone Crawler", "GameName": "Kilik" },
+    { "Name": "Pilgrim Moss Spitter", "GameName": "Overgrown Pilgrim" },
+    { "Name": "Pilgrim 01", "GameName": "Pilgrim Pouncer" },
+    { "Name": "Pilgrim 03", "GameName": "Pilgrim Groveller" },
+    { "Name": "Aspid Collector", "GameName": "Aknid" },
+    { "Name": "Bone Beast", "GameName": "Bell Beast" },
+    { "Name": "Pilgrim Fly", "GameName": "Winged Pilgrim" },
+    { "Name": "Dock Worker", "GameName": "Smelt Shoveller" },
+    { "Name": "Dock Flyer", "GameName": "Flintstone Flyer" },
+    { "Name": "Pilgrim StaffWielder", "GameName": "Pilgrim Guide" },
+    { "Name": "Bone Hunter Throw", "GameName": "Skarrgard" },
+    { "Name": "Bone Hunter Tiny", "GameName": "Skarrlid" },
+    { "Name": "Bone Hunter Buzzer", "GameName": "Skarrwing" },
+    { "Name": "Bone Hunter", "GameName": "Skarr Stalker" },
+    { "Name": "Bone Hunter Child", "GameName": "Skarr Scout" },
+    { "Name": "Bone Hunter Fly", "GameName": "Spear Skarr" },
+    { "Name": "Bone Hopper", "GameName": "Hardbone Hopper" },
+    { "Name": "Tar Slug", "GameName": "Lavalug" },
+    { "Name": "Shield Dock Worker", "GameName": "Smokerock Sifter" },
+    { "Name": "Dock Bomber", "GameName": "Flintflame Flyer" },
+    { "Name": "Dock Charger", "GameName": "Deep Diver" },
+    { "Name": "Fields Goomba", "GameName": "Fertid" },
+    { "Name": "Bone Circler Vicious", "GameName": "Vicious Caranid" },
+    { "Name": "Lace", "GameName": "Lace" },
+    { "Name": "Fields Flock Flyers", "GameName": "Brushflit" },
+    { "Name": "Fields Flyer", "GameName": "Flapping Fertid" },
+    { "Name": "Spine Floater", "GameName": "Hoker" },
+    { "Name": "Pilgrim 02", "GameName": "Pilgrim Hulk" },
+    { "Name": "Pilgrim 04", "GameName": "Pilgrim Hornfly" },
+    { "Name": "Song Golem", "GameName": "Fourth Chorus" },
+    { "Name": "Pilgrim Bell Thrower", "GameName": "Pilgrim Bellbearer" },
+    { "Name": "Crow", "GameName": "Craw" },
+    { "Name": "Crowman", "GameName": "Tallcraw" },
+    { "Name": "Mite", "GameName": "Mite" },
+    { "Name": "Crowman Dagger", "GameName": "Squatcraw" },
+    { "Name": "Farmer Catcher", "GameName": "Dreg Catcher" },
+    { "Name": "Farmer Centipede", "GameName": "Silk Snipper" },
+    { "Name": "Farmer Scissors", "GameName": "Thread Raker" },
+    { "Name": "Mitefly", "GameName": "Fluttermite" },
+    { "Name": "Rock Roller", "GameName": "Flintbeetle" },
+    { "Name": "Pond Skater", "GameName": "Pond Skipper" },
+    { "Name": "Pilgrim Fisher", "GameName": "Pondcatcher" },
+    { "Name": "Shellwood Gnat", "GameName": "Shellwood Gnat" },
+    { "Name": "Shellwood Wasp", "GameName": "Wood Wasp" },
+    { "Name": "Flower Drifter", "GameName": "Phacia" },
+    { "Name": "Stick Insect Charger", "GameName": "Splinterhorn" },
+    { "Name": "Stick Insect", "GameName": "Splinter" },
+    { "Name": "Bloom Shooter", "GameName": "Pollenica" },
+    { "Name": "Bloom Puncher", "GameName": "Gahlia" },
+    { "Name": "Stick Insect Flyer", "GameName": "Splinterbark" },
+    { "Name": "Splinter Queen", "GameName": "Sister Splinter" },
+    { "Name": "Rosary Pilgrim", "GameName": "Covetous Pilgrim" },
+    { "Name": "Pilgrim Bellthrower Fly", "GameName": "Winged Pilgrim Bellbearer" },
+    { "Name": "Bell Goomba", "GameName": "Furm" },
+    { "Name": "Bell Fly", "GameName": "Winged Furm" },
+    { "Name": "Skull King", "GameName": "Skull Tyrant" },
+    { "Name": "Pilgrim 05", "GameName": "Elder Pilgrim" },
+    { "Name": "Crypt Worm", "GameName": "Gromling" },
+    { "Name": "Slab Fly Large", "GameName": "Wardenfly" },
+    { "Name": "Bone Flyer Giant", "GameName": "Savage Beastfly" },
+    { "Name": "Gnat Giant", "GameName": "Mitemother" },
+    { "Name": "Roachfeeder Short", "GameName": "Roachcatcher" },
+    { "Name": "Dustroach", "GameName": "Muckroach" },
+    { "Name": "Spinner Boss", "GameName": "Widow" },
+    { "Name": "Coral Judge", "GameName": "Judge" },
+    { "Name": "Blade Spider", "GameName": "Pharlid" },
+    { "Name": "Pilgrim Hiker", "GameName": "Pilgrim Hiker" },
+    { "Name": "Coral Conch Shooter", "GameName": "Driznit" },
+    { "Name": "Coral Conch Driller Giant", "GameName": "Great Conchfly" },
+    { "Name": "Roachfeeder Tall", "GameName": "Roachfeeder" },
+    { "Name": "Roachkeeper", "GameName": "Roachkeeper" },
+    { "Name": "Last Judge", "GameName": "Last Judge" },
+    { "Name": "Understore Poker", "GameName": "Underpoke" },
+    { "Name": "Understore Thrower", "GameName": "Underloft" },
+    { "Name": "Understore Small", "GameName": "Underworker" },
+    { "Name": "Citadel Bat", "GameName": "Drapefly" },
+    { "Name": "Pilgrim 03 Understore", "GameName": "Underscrub" },
+    { "Name": "Understore Heavy", "GameName": "Undercrank" },
+    { "Name": "Pilgrim Staff Understore", "GameName": "Undersweep" },
+    { "Name": "Mite Heavy", "GameName": "Drapemite" },
+    { "Name": "Song Pilgrim 01", "GameName": "Envoy" },
+    { "Name": "Song Reed", "GameName": "Reed" },
+    { "Name": "Pilgrim 01 Song", "GameName": "Choir Pouncer" },
+    { "Name": "Song Pilgrim 03", "GameName": "Choristor" },
+    { "Name": "Pilgrim 03 Song", "GameName": "Choir Bellbearer" },
+    { "Name": "Song Automaton Fly", "GameName": "Cogworker" },
+    { "Name": "Pilgrim 02 Song", "GameName": "Choir Hornhead" },
+    { "Name": "Pilgrim 04 Song", "GameName": "Choir Flyer" },
+    { "Name": "Pilgrim Stomper Song", "GameName": "Choir Elder" },
+    { "Name": "Song Reed Grand", "GameName": "Grand Reed" },
+    { "Name": "Clockwork Dancer", "GameName": "Cogwork Dancers" },
+    { "Name": "Song Automaton 01", "GameName": "Cogwork Choirbug" },
+    { "Name": "Song Automaton Goomba", "GameName": "Cogwork Crawler" },
+    { "Name": "Song Automaton Fly Spike", "GameName": "Cogwork Spine" },
+    { "Name": "Song Automaton 02", "GameName": "Cogwork Cleanser" },
+    { "Name": "Song Automaton Shield", "GameName": "Cogwork Defender" },
+    { "Name": "Song Handmaiden", "GameName": "Clawmaiden" },
+    { "Name": "Scholar", "GameName": "Vaultkeeper" },
+    { "Name": "Scrollkeeper", "GameName": "Scrollreader" },
+    { "Name": "Lightbearer", "GameName": "Lampbearer" },
+    { "Name": "Song Automaton Ball", "GameName": "Cogwork Clapper" },
+    { "Name": "Vampire Gnat", "GameName": "Moorwing" },
+    { "Name": "Weaver Servitor", "GameName": "Servitor Ignim" },
+    { "Name": "Blade Spider Hang", "GameName": "Pharlid Diver" },
+    { "Name": "Bone Thumper", "GameName": "Marrowmaw" },
+    { "Name": "Bone Goomba Bounce Fly", "GameName": "Skullwing" },
+    { "Name": "Song Threaded Husk", "GameName": "Dreg Husk" },
+    { "Name": "Song Creeper", "GameName": "Mortician" },
+    { "Name": "Understore Automaton", "GameName": "Cogwork Underfly" },
+    { "Name": "Understore Automaton EX", "GameName": "Cogwork Hauler" },
+    { "Name": "Bone Spitter", "GameName": "Tarmite" },
+    { "Name": "Slab Prisoner Leaper New", "GameName": "Penitent" },
+    { "Name": "Slab Fly Mid", "GameName": "Guardfly" },
+    { "Name": "Slab Fly Small", "GameName": "Scabfly" },
+    { "Name": "Understore Mite Giant", "GameName": "Giant Drapemite" },
+    { "Name": "Trobbio", "GameName": "Trobbio" },
+    { "Name": "Song Pilgrim Maestro", "GameName": "Maestro" },
+    { "Name": "Song Administrator", "GameName": "Minister" },
+    { "Name": "Song Heavy Sentry", "GameName": "Choir Clapper" },
+    { "Name": "Crystal Drifter", "GameName": "Mnemonid" },
+    { "Name": "Peaks Drifter", "GameName": "Driftlin" },
+    { "Name": "Weaver Servitor Large", "GameName": "Servitor Boran" },
+    { "Name": "Song Pilgrim 02", "GameName": "Surgeon" },
+    { "Name": "Bone Worm", "GameName": "Grom" },
+    { "Name": "Song Threaded Husk Spin", "GameName": "Dregwheel" },
+    { "Name": "Conductor Boss", "GameName": "The Unravelled" },
+    { "Name": "Wisp", "GameName": "Wisp" },
+    { "Name": "Farmer Wisp", "GameName": "Burning Bug" },
+    { "Name": "Wisp Pyre Effigy", "GameName": "Father of the Flame" },
+    { "Name": "Rhino", "GameName": "Rhinogrund" },
+    { "Name": "Citadel Bat Large", "GameName": "Drapelord" },
+    { "Name": "Coral Goomba Large", "GameName": "Crustcrag" },
+    { "Name": "Coral Conch Shooter Heavy", "GameName": "Driznarga" },
+    { "Name": "MossBone Crawler Fat", "GameName": "Massive Mossgrub" },
+    { "Name": "Arborium Keeper", "GameName": "Memoria" },
+    { "Name": "Giant Flea", "GameName": "Huge Flea" },
+    { "Name": "Slab Fly Small Fresh", "GameName": "Freshfly" },
+    { "Name": "Slab Fly Broodmother", "GameName": "Broodmother" },
+    { "Name": "Roachkeeper Chef Tiny", "GameName": "Roachserver" },
+    { "Name": "Roachkeeper Chef", "GameName": "Disgraced Chef Lugoli" },
+    { "Name": "Shakra", "GameName": "Shakra" },
+    { "Name": "Coral Spike Goomba", "GameName": "Coral Furm" },
+    { "Name": "Coral Conch Stabber", "GameName": "Pokenabbin" },
+    { "Name": "Coral Conch Driller", "GameName": "Conchfly" },
+    { "Name": "Swamp Drifter", "GameName": "Mothleaf Lagnia" },
+    { "Name": "Swamp Mosquito", "GameName": "Swamp Squit" },
+    { "Name": "Swamp Goomba", "GameName": "Miremite" },
+    { "Name": "Wraith", "GameName": "Wraith" },
+    { "Name": "Phantom", "GameName": "Phantom" },
+    { "Name": "Swamp Muckman", "GameName": "Stilkin" },
+    { "Name": "Rosary Thief", "GameName": "Snitchfly" },
+    { "Name": "Bloat Roach", "GameName": "Bloatroach" },
+    { "Name": "Dustroach Pollywog", "GameName": "Slubberlug" },
+    { "Name": "Swamp Muckman Tall", "GameName": "Stilkin Trapper" },
+    { "Name": "Swamp Ductsucker", "GameName": "Ductsucker" },
+    { "Name": "Swamp Mosquito Skinny", "GameName": "Spit Squit" },
+    { "Name": "Swamp Barnacle", "GameName": "Barnak" },
+    { "Name": "Swamp Shaman", "GameName": "Groal the Great" },
+    { "Name": "First Weaver", "GameName": "First Sinner" },
+    { "Name": "Silk Boss", "GameName": "Grand Mother Silk" },
+    { "Name": "Dock Guard Thrower", "GameName": "Forebrothers Signis & Gron" },
+    { "Name": "Tar Slug Huge", "GameName": "Lavalarga" },
+    { "Name": "Song Knight", "GameName": "Second Sentinel" },
+    { "Name": "Zap Core Enemy", "GameName": "Voltvyrm" },
+    { "Name": "Shell Fossil Mimic", "GameName": "Shardillard" },
+    { "Name": "Giant Centipede", "GameName": "Bell Eater" },
+    { "Name": "Black Thread Core", "GameName": "Void Mass" },
+    { "Name": "Abyss Crawler", "GameName": "Shadow Creeper" },
+    { "Name": "Gloomfly", "GameName": "Gloomsac" },
+    { "Name": "Gloom Beast", "GameName": "Gargant Gloom" },
+    { "Name": "Abyss Crawler Large", "GameName": "Shadow Charger" },
+    { "Name": "Void Tendrils", "GameName": "Void Tendrils" },
+    { "Name": "Crystal Drifter Giant", "GameName": "Mnemonord" },
+    { "Name": "Pinstress Boss", "GameName": "Pinstress" },
+    { "Name": "Bone Hopper Giant", "GameName": "Hardbone Elder" },
+    { "Name": "Bone Hunter Chief", "GameName": "Last Claw" },
+    { "Name": "Hunter Queen", "GameName": "Skarrsinger Karmelita" },
+    { "Name": "Song Scholar Acolyte", "GameName": "Vaultborn" },
+    { "Name": "Seth", "GameName": "Shrine Guardian Seth" },
+    { "Name": "Flower Queen", "GameName": "Nyleth" },
+    { "Name": "Crowman Juror Tiny", "GameName": "Craw Juror" },
+    { "Name": "Crowman Juror", "GameName": "Tallcraw Juror" },
+    { "Name": "Crowman Dagger Juror", "GameName": "Squatcraw Juror" },
+    { "Name": "Crawfather", "GameName": "Crawfather" },
+    { "Name": "Garmond", "GameName": "Lost Garmond" },
+    { "Name": "Bone Hunter Trapper", "GameName": "Gurr the Outcast" },
+    { "Name": "Roof Crab", "GameName": "Craggler" },
+    { "Name": "Lifeblood Fly", "GameName": "Winged Lifeseed" },
+    { "Name": "Bone Worm BlueBlood", "GameName": "Plasmid" },
+    { "Name": "Bone Worm BlueTurret", "GameName": "Plasmidas" },
+    { "Name": "Blue Assistant", "GameName": "Plasmified Zango" },
+    { "Name": "Tormented Trobbio", "GameName": "Tormented Trobbio" },
+    { "Name": "Hornet Dragonfly", "GameName": "Pendra" },
+    { "Name": "Grass Goomba", "GameName": "Leaf Roller" },
+    { "Name": "Lilypad Fly", "GameName": "Leaf Glider" },
+    { "Name": "Grasshopper Fly", "GameName": "Escalion" },
+    { "Name": "Dragonfly Large", "GameName": "Pendragor" },
+    { "Name": "Lilypad Trap", "GameName": "Nuphar" },
+    { "Name": "Grasshopper Child", "GameName": "Kindanir" },
+    { "Name": "Grasshopper Slasher", "GameName": "Verdanir" },
+    { "Name": "Cloverstag", "GameName": "Cloverstag" },
+    { "Name": "Cloverstag White", "GameName": "Palestag" },
+    { "Name": "Clover Dancer", "GameName": "Clover Dancers" },
+    { "Name": "Coral Swimmer Small", "GameName": "Yuma" },
+    { "Name": "Coral Warrior", "GameName": "Karaka" },
+    { "Name": "Coral Flyer Throw", "GameName": "Yago" },
+    { "Name": "Coral Swimmer Fat", "GameName": "Kai" },
+    { "Name": "Coral Flyer", "GameName": "Kakri" },
+    { "Name": "Coral Goombas", "GameName": "Crustcrawler" },
+    { "Name": "Coral Hunter", "GameName": "Alita" },
+    { "Name": "Coral Big Jellyfish", "GameName": "Yumama" },
+    { "Name": "Coral Brawler", "GameName": "Karak Gor" },
+    { "Name": "Spike Swimmer", "GameName": "Steelspine Kai" },
+    { "Name": "Coral Bubble Brute", "GameName": "Corrcrust Karaka" },
+    { "Name": "Poke Swimmer", "GameName": "Spinebeak Kai" },
+    { "Name": "Coral King", "GameName": "Crust King Khann" },
+    { "Name": "White Palace Fly", "GameName": "Wingmould" },
+    { "Name": "Centipede Trap", "GameName": "Garpid" },
+    { "Name": "Spike Lazy Flyer", "GameName": "Imoba" },
+    { "Name": "Surface Scuttler", "GameName": "Skrill" },
+    { "Name": "Coral Warrior Grey", "GameName": "Watcher at the Edge" },
+    { "Name": "Small Crab", "GameName": "Cragglite" },
+    { "Name": "Maggots", "GameName": "Muckmaggot" },
+    { "Name": "Sand Centipede", "GameName": "Sandcarver" },
+    { "Name": "Coral Judge Child", "GameName": "Squirrm" },
+    { "Name": "Slab Prisoner Fly New", "GameName": "Puny Penitent" },
+    { "Name": "Abyss Mass", "GameName": "Summoned Saviour" },
+    { "Name": "Lost Lace", "GameName": "Lost Lace" },
+];
+// ========== 全局变量 ==========
+        let currentResult = [];
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const resultArea = document.getElementById('resultArea');
+        const resultBody = document.getElementById('resultBody');
+        const stats = document.getElementById('stats');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const loading = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+
+        // ========== 核心函数：处理文件 (已适配 silk.txt) ==========
+        // ========== 核心函数：处理文件 (已适配 silk.txt) ==========
+        async function processFile(file) {
+            loading.style.display = 'block';
+            errorDiv.style.display = 'none';
+            resultArea.style.display = 'none';
+            
+            try {
+                const text = await file.text();
+                let parsedData;
+                const cleanText = text.replace(/&#34;/g, '"').replace(/&#39;/g, "'");
+
+                // --- 步骤1: 解析JSON ---
+                try {
+                    parsedData = JSON.parse(cleanText);
+                } catch (e) {
+                    throw new Error('文件格式不正确，无法解析为JSON。请确认是 silk.txt 存档文件。');
+                }
+
+                // --- 步骤2: 提取怪物列表 ---
+                const enemyList = parsedData?.playerData?.EnemyJournalKillData?.list;
+                if (!enemyList || !Array.isArray(enemyList)) {
+                    throw new Error('存档中没有找到怪物击杀数据列表。');
+                }
+                console.log('找到怪物数据，共', enemyList.length, '条');
+
+                // ==== 核心修改开始 ====
+                // --- 步骤3: 构建wikiData索引映射（固定编号的核心）---
+                const wikiIndexMap = {}; // 中文名 -> wikiData中的固定序号
+                const wikiKeys = Object.keys(wikiData);
+                wikiKeys.forEach((chineseName, index) => {
+                    wikiIndexMap[chineseName] = index + 1; // 从1开始编号
+                });
+
+                // --- 步骤4: 建立映射字典 ---
+                const idToGameName = {};
+                for (let item of mappingList) {
+                    idToGameName[item.Name] = item.GameName;
+                }
+
+                const gameNameToInfo = {};
+                for (let chineseName in wikiData) {
+                    const data = wikiData[chineseName];
+                    const officialEnglish = data.english.trim();
+                    gameNameToInfo[officialEnglish] = {
+                        chineseName: chineseName,
+                        requirement: data.requirement
+                    };
+                }
+
+                // --- 步骤5: 筛选出未解锁的怪物，并赋予固定wiki编号 ---
+                const unlockedMonsters = [];
+                for (let i = 0; i < enemyList.length; i++) {
+                    const enemy = enemyList[i];
+                    const saveId = enemy.Name;
+                    const kills = enemy.Record?.Kills || 0;
+
+                    const officialName = idToGameName[saveId];
+                    if (!officialName) continue;
+
+                    const info = gameNameToInfo[officialName];
+                    if (!info) continue;
+
+                    const remaining = info.requirement - kills;
+                    if (remaining > 0) {
+                        // 核心：从wikiIndexMap获取固定编号
+                        const fixedWikiIndex = wikiIndexMap[info.chineseName];
+                        
+                        unlockedMonsters.push({
+                            固定编号: fixedWikiIndex, // 使用固定编号
+                            中文名: info.chineseName,
+                            官方英文: officialName,
+                            存档英文: saveId,
+                            当前击杀: kills,
+                            所需击杀: info.requirement,
+                            还差: remaining
+                        });
+                    }
+                }
+
+                // --- 步骤6: 按固定编号排序 ---
+                unlockedMonsters.sort((a, b) => a.固定编号 - b.固定编号);
+                // ==== 核心修改结束 ====
+
+                currentResult = unlockedMonsters;
+
+                // --- 步骤7: 显示结果 ---
+                if (currentResult.length === 0) {
+                    showError('恭喜！所有怪物均已解锁。');
+                } else {
+                    displayResult(currentResult);
+                }
+                
+            } catch (e) {
+                showError('处理文件时出错：' + e.message);
+                console.error(e);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // ========== 显示结果 ==========
+        // ========== 显示结果 ==========
+        function displayResult(result) {
+            stats.innerHTML = `共找到 <strong>${result.length}</strong> 个未解锁怪物`;
+            
+            resultBody.innerHTML = '';
+            for (let r of result) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${r.固定编号}</td> <!-- 改为固定编号 -->
+                    <td>${r.中文名}</td>
+                    <td>${r.官方英文}</td>
+                    <td><code>${r.存档英文}</code></td>
+                    <td>${r.当前击杀}</td>
+                    <td>${r.所需击杀}</td>
+                    <td style="color:#e74c3c; font-weight:bold;">${r.还差}</td>
+                `;
+                resultBody.appendChild(row);
+            }
+            
+            resultArea.style.display = 'block';
+        }
+
+        // ========== 显示错误 ==========
+        function showError(msg) {
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
+        }
+
+        // ========== 下载结果 ==========
+       downloadBtn.addEventListener('click', () => {
+            if (currentResult.length === 0) return;
+            
+            let content = '固定编号\t中文名\t官方英文名\t存档英文ID\t当前击杀\t所需击杀\t还差\n';
+            for (let r of currentResult) {
+                content += `${r.固定编号}\t${r.中文名}\t${r.官方英文}\t${r.存档英文}\t${r.当前击杀}\t${r.所需击杀}\t${r.还差}\n`;
+            }
+            
+            const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '未解锁怪物列表.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // ========== 事件监听 ==========
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) processFile(file);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) processFile(file);
+        });
+    </script>
+</body>
+</html>
