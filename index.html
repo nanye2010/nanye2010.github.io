@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 <head>
     <meta charset="UTF-8">
     <title>空洞骑士：丝之歌 怪物筛选器 (丝之歌版)</title>
@@ -51,12 +52,12 @@
 </head>
 <body>
     <h1>空洞骑士：丝之歌 怪物筛选器</h1>
-    <p>此工具专为直接读取 <code>silk.txt</code> 完整存档设计。将您的存档文件拖放到下方区域，即可查看所有未解锁的怪物（击杀数不足）。</p>
+    <p>此工具专为直接读取 <code>usedX.dat</code> 完整存档设计。将您的存档文件拖放到下方区域，即可查看所有未解锁的怪物（击杀数不足）。</p>
     
     <div class="drop-zone" id="dropZone">
-        <p>📁 将 <strong>silk.txt</strong> 文件拖放到此处</p>
+        <p>📁 将 <strong>存档</strong> 文件dat拖放到此处</p>
         <p style="color: #777; font-size: 14px;">或点击此处选择文件</p>
-        <input type="file" id="fileInput" accept=".txt" style="display: none;">
+        <input type="file" id="fileInput" accept=".dat" style="display: none;">
     </div>
 
     <div id="loading" style="display: none;">⏳ 正在分析存档数据，请稍候...</div>
@@ -82,6 +83,44 @@
     </div>
 
     <script>
+        // ===== rainincat 的解码器（精简版）=====
+const ie = CryptoJS;  // 需要引入 CryptoJS 库
+
+// AES 密钥
+const bl = ie.enc.Utf8.parse("UKu52ePUBwetZ9wNX88o54dnfKRu0T1l");
+
+function Fl(e) {
+    const yl = new Uint8Array([0, 1, 0, 0, 0, 255, 255, 255, 255, 1, 0, 0, 0, 0, 0, 0, 0, 6, 1, 0, 0, 0]);
+    let t = e.slice(yl.length, e.length - 1);
+    let r = 0;
+    for (let n = 0; n < 5 && (r++, (t[n] & 128) !== 0); n++);
+    return t.slice(r);
+}
+
+function Dl(e) {
+    const t = ie.lib.WordArray.create(e);
+    const r = ie.AES.decrypt({
+        ciphertext: t,
+        format: ie.format.Hex
+    }, bl, {
+        mode: ie.mode.ECB,
+        padding: ie.pad.Pkcs7
+    });
+    return new Uint8Array(r.toString(ie.enc.Latin1).split("").map(n => n.charCodeAt(0)));
+}
+
+function ml(e) {
+    let t = Fl(e);
+    const r = new TextDecoder("latin1").decode(t);
+    const n = ie.enc.Base64.parse(r);
+    const s = new Uint8Array(n.sigBytes);
+    for (let x = 0; x < n.sigBytes; x++) {
+        s[x] = n.words[x >>> 2] >>> 24 - x % 4 * 8 & 255;
+    }
+    const i = Dl(s);
+    return new TextDecoder("utf-8").decode(i);
+}
+// ===== 解码器结束 =====
         // ========== 核心数据：Wiki信息 (中文名 -> 英文名 + 需求击杀数) ==========
         const wikiData = {
   "苔藓蠕虫": { "english": " Mossgrub", "requirement": 25 },
@@ -581,7 +620,16 @@
             resultArea.style.display = 'none';
             
             try {
-                const text = await file.text();
+                let text;
+                if (file.name.endsWith('.dat')) {
+                // .dat 文件：用解码器
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                text = ml(uint8Array);  // 调用解码器
+                } else {
+                // .txt 或 .json：直接读
+                text = await file.text();
+                }
                 let parsedData;
                 const cleanText = text.replace(/&#34;/g, '"').replace(/&#39;/g, "'");
 
