@@ -188,7 +188,7 @@
         let lastModifiedTime = 0;
 
         // ===== 您的核心数据（请确保这些数据存在）=====
-        const wikiData = {"苔藓蠕虫": { "english": " Mossgrub", "requirement": 25 },
+        const wikiData = { "苔藓蠕虫": { "english": " Mossgrub", "requirement": 25 },
   "大型苔藓蠕虫": { "english": " Massive_Mossgrub", "requirement": 3 },
   "苔翼虫": { "english": " Mossmir", "requirement": 20 },
   "苔藓之母": { "english": " Moss Mother", "requirement": 3 },
@@ -402,14 +402,14 @@
   "维达尼尔": { "english": " Verdanir", "requirement": 10 },
   "埃斯卡里昂": { "english": " Escalion", "requirement": 10 },
   "三叶草舞者": { "english": " Clover Dancers", "requirement": 1 },
-  "阴影爬虫 (丝之歌)|阴影爬虫": { "english": " Shadow_Creeper_(Silksong)", "requirement": 16 },
+  "阴影爬虫": { "english": " Shadow_Creeper", "requirement": 16 },
   "阴影冲锋者": { "english": " Shadow Charger", "requirement": 6 },
   "幽暗囊": { "english": " Gloomsac", "requirement": 15 },
   "幽暗巨兽": { "english": " Gargant Gloom", "requirement": 4 },
-  "虚空卷须 (丝之歌)|虚空卷须": { "english": " Void_Tendrils_(Silksong)", "requirement": 1 },
+  "虚空卷须": { "english": " Void_Tendrils", "requirement": 1 },
   "虚空聚合体": { "english": " Void Mass", "requirement": 8 },
   "虚面救世主": { "english": " Summoned Saviour", "requirement": 1 },
-  "翅膀傀儡 (丝之歌)|翅膀傀儡": { "english": " Wingmould_(Silksong)", "requirement": 10 },
+  "翅膀傀儡": { "english": " Wingmould", "requirement": 10 },
   "加尔皮德": { "english": " Garpid", "requirement": 30 },
   "伊莫巴": { "english": " Imoba", "requirement": 4 },
   "沙行虫": { "english": " Skrill", "requirement": 10 },
@@ -424,8 +424,12 @@
   "幽影": { "english": " Phantom", "requirement": 1 },
   "蕾丝": { "english": " Lace", "requirement": 1 },
   "崇高圣母灵丝": { "english": " Grand Mother Silk", "requirement": 1 },
-  "失心蕾丝": { "english": " Lost Lace", "requirement": 1 }};
-        const mappingList = [ { "Name": "MossBone Crawler", "GameName": "Mossgrub" },
+  "失心蕾丝": { "english": " Lost Lace", "requirement": 1 }
+        };
+
+        // ========== 核心数据：映射表 (存档ID -> 官方英文名) ==========
+        const mappingList = [
+    { "Name": "MossBone Crawler", "GameName": "Mossgrub" },
     { "Name": "MossBone Fly", "GameName": "Mossmir" },
     { "Name": "Bone Roller", "GameName": "Mawling" },
     { "Name": "Mossbone Mother", "GameName": "Moss Mother" },
@@ -566,7 +570,7 @@
     { "Name": "Citadel Bat Large", "GameName": "Drapelord" },
     { "Name": "Coral Goomba Large", "GameName": "Crustcrag" },
     { "Name": "Coral Conch Shooter Heavy", "GameName": "Driznarga" },
-    { "Name": "MossBone Crawler Fat", "GameName": "Massive Mossgrub" },
+    { "Name": "MossBone Crawler Fat", "GameName": "Massive_Mossgrub" },
     { "Name": "Arborium Keeper", "GameName": "Memoria" },
     { "Name": "Giant Flea", "GameName": "Huge Flea" },
     { "Name": "Slab Fly Small Fresh", "GameName": "Freshfly" },
@@ -600,11 +604,11 @@
     { "Name": "Shell Fossil Mimic", "GameName": "Shardillard" },
     { "Name": "Giant Centipede", "GameName": "Bell Eater" },
     { "Name": "Black Thread Core", "GameName": "Void Mass" },
-    { "Name": "Abyss Crawler", "GameName": "Shadow Creeper" },
+    { "Name": "Abyss Crawler", "GameName": "Shadow_Creeper" },
     { "Name": "Gloomfly", "GameName": "Gloomsac" },
     { "Name": "Gloom Beast", "GameName": "Gargant Gloom" },
     { "Name": "Abyss Crawler Large", "GameName": "Shadow Charger" },
-    { "Name": "Void Tendrils", "GameName": "Void Tendrils" },
+    { "Name": "Void_Tendrils", "GameName": "Void_Tendrils" },
     { "Name": "Crystal Drifter Giant", "GameName": "Mnemonord" },
     { "Name": "Pinstress Boss", "GameName": "Pinstress" },
     { "Name": "Bone Hopper Giant", "GameName": "Hardbone Elder" },
@@ -660,7 +664,9 @@
     { "Name": "Coral Judge Child", "GameName": "Squirrm" },
     { "Name": "Slab Prisoner Fly New", "GameName": "Puny Penitent" },
     { "Name": "Abyss Mass", "GameName": "Summoned Saviour" },
-    { "Name": "Lost Lace", "GameName": "Lost Lace" },];
+    { "Name": "Lost Lace", "GameName": "Lost Lace" },
+    { "Name": "Garmond & Zaza", "GameName": "Garmond & Zaza" }
+];
 
         // ===== DOM 元素引用 =====
         const dropZone = document.getElementById('dropZone');
