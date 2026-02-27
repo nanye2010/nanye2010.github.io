@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<!-- CryptoJS 库保持不变 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
 <head>
     <meta charset="UTF-8">
     <title>空洞骑士：丝之歌 怪物筛选器 (丝之歌版)</title>
@@ -48,16 +50,79 @@
         #loading { background: #d5f4e6; color: #27ae60; }
         #error { background: #fadbd8; color: #c0392b; }
         .stats { font-size: 16px; margin: 15px 0; color: #7d3c98; font-weight: bold; }
+        
+        /* ==== 拖拽区域内控件样式 ==== */
+        .drop-zone .controls {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px dashed #bdc3c7;
+        }
+        .drop-zone .hint-box {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-size: 14px;
+            text-align: left;
+        }
+        .drop-zone .hint-box.info { background-color: #e8f4fd; color: #0c5460; border: 1px solid #b8daff; }
+        .drop-zone .hint-box.warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .drop-zone .hint-box.success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .drop-zone .control-btn {
+            margin: 8px 5px;
+            padding: 10px 18px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: inline-block;
+        }
+        .drop-zone .control-btn:hover { background: #2980b9; }
+        .drop-zone .control-btn.stop { background: #e74c3c; }
+        .drop-zone .control-btn.stop:hover { background: #c0392b; }
+        .drop-zone .file-info {
+            font-size: 13px;
+            color: #7f8c8d;
+            margin-top: 10px;
+            font-style: italic;
+            min-height: 20px;
+        }
+        .drop-zone .divider {
+            margin: 15px 0;
+            color: #95a5a6;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+        }
+        .drop-zone .divider::before,
+        .drop-zone .divider::after {
+            content: "";
+            flex: 1;
+            border-bottom: 1px solid #bdc3c7;
+        }
+        .drop-zone .divider span {
+            padding: 0 10px;
+        }
     </style>
 </head>
 <body>
     <h1>空洞骑士：丝之歌 怪物筛选器</h1>
     <p>此工具专为直接读取 <code>usedX.dat</code> 完整存档设计。将您的存档文件拖放到下方区域，即可查看所有未解锁的怪物（击杀数不足）。</p>
-    
+
+    <!-- 所有控件集成在拖拽区域内 -->
     <div class="drop-zone" id="dropZone">
-        <p>📁 将 <strong>存档</strong> 文件dat拖放到此处</p>
+        <p>📁 将 <strong>存档文件 (.dat 或 .txt)</strong> 拖放到此处</p>
         <p style="color: #777; font-size: 14px;">或点击此处选择文件</p>
-        <input type="file" id="fileInput" accept=".dat" style="display: none;">
+        
+        <!-- 自动刷新控制区域将动态插入到这里 -->
+        <div id="autoRefreshControls" class="controls"></div>
+        
+        <!-- 文件信息显示 -->
+        <div id="fileInfo" class="file-info"></div>
+        
+        <input type="file" id="fileInput" accept=".dat,.txt,.json" style="display: none;">
     </div>
 
     <div id="loading" style="display: none;">⏳ 正在分析存档数据，请稍候...</div>
@@ -68,7 +133,7 @@
         <table id="resultTable">
             <thead>
                 <tr>
-                    <th>原始编号</th> <!-- 从“序号”改为“原始编号” -->
+                    <th>原始编号</th>
                     <th>中文名</th>
                     <th>官方英文名</th>
                     <th>存档内部ID</th>
@@ -84,46 +149,46 @@
 
     <script>
         // ===== rainincat 的解码器（精简版）=====
-const ie = CryptoJS;  // 需要引入 CryptoJS 库
+        const ie = CryptoJS; // 需要引入 CryptoJS 库
+        const bl = ie.enc.Utf8.parse("UKu52ePUBwetZ9wNX88o54dnfKRu0T1l");
+        function Fl(e) {
+            const yl = new Uint8Array([0, 1, 0, 0, 0, 255, 255, 255, 255, 1, 0, 0, 0, 0, 0, 0, 0, 6, 1, 0, 0, 0]);
+            let t = e.slice(yl.length, e.length - 1);
+            let r = 0;
+            for (let n = 0; n < 5 && (r++, (t[n] & 128) !== 0); n++);
+            return t.slice(r);
+        }
+        function Dl(e) {
+            const t = ie.lib.WordArray.create(e);
+            const r = ie.AES.decrypt({
+                ciphertext: t,
+                format: ie.format.Hex
+            }, bl, {
+                mode: ie.mode.ECB,
+                padding: ie.pad.Pkcs7
+            });
+            return new Uint8Array(r.toString(ie.enc.Latin1).split("").map(n => n.charCodeAt(0)));
+        }
+        function ml(e) {
+            let t = Fl(e);
+            const r = new TextDecoder("latin1").decode(t);
+            const n = ie.enc.Base64.parse(r);
+            const s = new Uint8Array(n.sigBytes);
+            for (let x = 0; x < n.sigBytes; x++) {
+                s[x] = n.words[x >>> 2] >>> 24 - x % 4 * 8 & 255;
+            }
+            const i = Dl(s);
+            return new TextDecoder("utf-8").decode(i);
+        }
 
-// AES 密钥
-const bl = ie.enc.Utf8.parse("UKu52ePUBwetZ9wNX88o54dnfKRu0T1l");
+        // ===== 自动刷新需要的全局变量 =====
+        let fileHandle = null;
+        let currentFile = null;
+        let refreshTimer = null;
+        let lastModifiedTime = 0;
 
-function Fl(e) {
-    const yl = new Uint8Array([0, 1, 0, 0, 0, 255, 255, 255, 255, 1, 0, 0, 0, 0, 0, 0, 0, 6, 1, 0, 0, 0]);
-    let t = e.slice(yl.length, e.length - 1);
-    let r = 0;
-    for (let n = 0; n < 5 && (r++, (t[n] & 128) !== 0); n++);
-    return t.slice(r);
-}
-
-function Dl(e) {
-    const t = ie.lib.WordArray.create(e);
-    const r = ie.AES.decrypt({
-        ciphertext: t,
-        format: ie.format.Hex
-    }, bl, {
-        mode: ie.mode.ECB,
-        padding: ie.pad.Pkcs7
-    });
-    return new Uint8Array(r.toString(ie.enc.Latin1).split("").map(n => n.charCodeAt(0)));
-}
-
-function ml(e) {
-    let t = Fl(e);
-    const r = new TextDecoder("latin1").decode(t);
-    const n = ie.enc.Base64.parse(r);
-    const s = new Uint8Array(n.sigBytes);
-    for (let x = 0; x < n.sigBytes; x++) {
-        s[x] = n.words[x >>> 2] >>> 24 - x % 4 * 8 & 255;
-    }
-    const i = Dl(s);
-    return new TextDecoder("utf-8").decode(i);
-}
-// ===== 解码器结束 =====
-        // ========== 核心数据：Wiki信息 (中文名 -> 英文名 + 需求击杀数) ==========
-        const wikiData = {
-  "苔藓蠕虫": { "english": " Mossgrub", "requirement": 25 },
+        // ===== 您的核心数据（请确保这些数据存在）=====
+        const wikiData = {"苔藓蠕虫": { "english": " Mossgrub", "requirement": 25 },
   "大型苔藓蠕虫": { "english": " Massive_Mossgrub", "requirement": 3 },
   "苔翼虫": { "english": " Mossmir", "requirement": 20 },
   "苔藓之母": { "english": " Moss Mother", "requirement": 3 },
@@ -188,7 +253,7 @@ function ml(e) {
   "飞蚀螨": { "english": " Fluttermite", "requirement": 25 },
   "螨母": { "english": " Mitemother", "requirement": 10 },
   "灵丝筛工": { "english": " Dreg Catcher", "requirement": 20 },
-  "裁丝疯匠": { "english": " Silk Snipper", "requirement": 25 },
+  "裁丝疯匠": { "english": " Silk Snipper", "requirement": 15 },
   "残丝耙工": { "english": " Thread Raker", "requirement": 15 },
   "荒沼翼主": { "english": " Moorwing", "requirement": 1 },
   "火灵": { "english": " Wisp", "requirement": 15 },
@@ -337,14 +402,14 @@ function ml(e) {
   "维达尼尔": { "english": " Verdanir", "requirement": 10 },
   "埃斯卡里昂": { "english": " Escalion", "requirement": 10 },
   "三叶草舞者": { "english": " Clover Dancers", "requirement": 1 },
-  "阴影爬虫": { "english": " Shadow_Creeper", "requirement": 16 },
+  "阴影爬虫 (丝之歌)|阴影爬虫": { "english": " Shadow_Creeper_(Silksong)", "requirement": 16 },
   "阴影冲锋者": { "english": " Shadow Charger", "requirement": 6 },
   "幽暗囊": { "english": " Gloomsac", "requirement": 15 },
   "幽暗巨兽": { "english": " Gargant Gloom", "requirement": 4 },
-  "虚空卷须": { "english": " Void_Tendrils", "requirement": 1 },
+  "虚空卷须 (丝之歌)|虚空卷须": { "english": " Void_Tendrils_(Silksong)", "requirement": 1 },
   "虚空聚合体": { "english": " Void Mass", "requirement": 8 },
   "虚面救世主": { "english": " Summoned Saviour", "requirement": 1 },
-  "翅膀傀儡": { "english": " Wingmould", "requirement": 10 },
+  "翅膀傀儡 (丝之歌)|翅膀傀儡": { "english": " Wingmould_(Silksong)", "requirement": 10 },
   "加尔皮德": { "english": " Garpid", "requirement": 30 },
   "伊莫巴": { "english": " Imoba", "requirement": 4 },
   "沙行虫": { "english": " Skrill", "requirement": 10 },
@@ -359,12 +424,8 @@ function ml(e) {
   "幽影": { "english": " Phantom", "requirement": 1 },
   "蕾丝": { "english": " Lace", "requirement": 1 },
   "崇高圣母灵丝": { "english": " Grand Mother Silk", "requirement": 1 },
-  "失心蕾丝": { "english": " Lost Lace", "requirement": 1 }
-        };
-
-        // ========== 核心数据：映射表 (存档ID -> 官方英文名) ==========
-        const mappingList = [
-    { "Name": "MossBone Crawler", "GameName": "Mossgrub" },
+  "失心蕾丝": { "english": " Lost Lace", "requirement": 1 }};
+        const mappingList = [ { "Name": "MossBone Crawler", "GameName": "Mossgrub" },
     { "Name": "MossBone Fly", "GameName": "Mossmir" },
     { "Name": "Bone Roller", "GameName": "Mawling" },
     { "Name": "Mossbone Mother", "GameName": "Moss Mother" },
@@ -505,7 +566,7 @@ function ml(e) {
     { "Name": "Citadel Bat Large", "GameName": "Drapelord" },
     { "Name": "Coral Goomba Large", "GameName": "Crustcrag" },
     { "Name": "Coral Conch Shooter Heavy", "GameName": "Driznarga" },
-    { "Name": "MossBone Crawler Fat", "GameName": "Massive_Mossgrub" },
+    { "Name": "MossBone Crawler Fat", "GameName": "Massive Mossgrub" },
     { "Name": "Arborium Keeper", "GameName": "Memoria" },
     { "Name": "Giant Flea", "GameName": "Huge Flea" },
     { "Name": "Slab Fly Small Fresh", "GameName": "Freshfly" },
@@ -539,11 +600,11 @@ function ml(e) {
     { "Name": "Shell Fossil Mimic", "GameName": "Shardillard" },
     { "Name": "Giant Centipede", "GameName": "Bell Eater" },
     { "Name": "Black Thread Core", "GameName": "Void Mass" },
-    { "Name": "Abyss Crawler", "GameName": "Shadow_Creeper" },
+    { "Name": "Abyss Crawler", "GameName": "Shadow Creeper" },
     { "Name": "Gloomfly", "GameName": "Gloomsac" },
     { "Name": "Gloom Beast", "GameName": "Gargant Gloom" },
     { "Name": "Abyss Crawler Large", "GameName": "Shadow Charger" },
-    { "Name": "Void_Tendrils", "GameName": "Void_Tendrils" },
+    { "Name": "Void Tendrils", "GameName": "Void Tendrils" },
     { "Name": "Crystal Drifter Giant", "GameName": "Mnemonord" },
     { "Name": "Pinstress Boss", "GameName": "Pinstress" },
     { "Name": "Bone Hopper Giant", "GameName": "Hardbone Elder" },
@@ -599,11 +660,9 @@ function ml(e) {
     { "Name": "Coral Judge Child", "GameName": "Squirrm" },
     { "Name": "Slab Prisoner Fly New", "GameName": "Puny Penitent" },
     { "Name": "Abyss Mass", "GameName": "Summoned Saviour" },
-    { "Name": "Lost Lace", "GameName": "Lost Lace" },
-    { "Name": "Garmond & Zaza", "GameName": "Garmond & Zaza" }
-];
-// ========== 全局变量 ==========
-        let currentResult = [];
+    { "Name": "Lost Lace", "GameName": "Lost Lace" },];
+
+        // ===== DOM 元素引用 =====
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const resultArea = document.getElementById('resultArea');
@@ -612,10 +671,13 @@ function ml(e) {
         const downloadBtn = document.getElementById('downloadBtn');
         const loading = document.getElementById('loading');
         const errorDiv = document.getElementById('error');
+        const autoRefreshControls = document.getElementById('autoRefreshControls');
+        const fileInfoEl = document.getElementById('fileInfo');
+        let currentResult = [];
 
-        // ========== 核心函数：处理文件 (已适配 silk.txt) ==========
-        // ========== 核心函数：处理文件 (已适配 silk.txt) ==========
+        // ===== 核心文件处理函数（兼容 .dat 和 .txt）=====
         async function processFile(file) {
+            currentFile = file;
             loading.style.display = 'block';
             errorDiv.style.display = 'none';
             resultArea.style.display = 'none';
@@ -623,45 +685,39 @@ function ml(e) {
             try {
                 let text;
                 if (file.name.endsWith('.dat')) {
-                // .dat 文件：用解码器
-                const arrayBuffer = await file.arrayBuffer();
-                const uint8Array = new Uint8Array(arrayBuffer);
-                text = ml(uint8Array);  // 调用解码器
+                    const arrayBuffer = await file.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    text = ml(uint8Array);
                 } else {
-                // .txt 或 .json：直接读
-                text = await file.text();
+                    text = await file.text();
                 }
-                let parsedData;
+                
                 const cleanText = text.replace(/&#34;/g, '"').replace(/&#39;/g, "'");
-
-                // --- 步骤1: 解析JSON ---
+                let parsedData;
                 try {
                     parsedData = JSON.parse(cleanText);
                 } catch (e) {
-                    throw new Error('文件格式不正确，无法解析为JSON。请确认是 silk.txt 存档文件。');
+                    throw new Error('文件格式不正确，无法解析为JSON。');
                 }
-
-                // --- 步骤2: 提取怪物列表 ---
+                
                 const enemyList = parsedData?.playerData?.EnemyJournalKillData?.list;
                 if (!enemyList || !Array.isArray(enemyList)) {
                     throw new Error('存档中没有找到怪物击杀数据列表。');
                 }
                 console.log('找到怪物数据，共', enemyList.length, '条');
 
-                // ==== 核心修改开始 ====
-                // --- 步骤3: 构建wikiData索引映射（固定编号的核心）---
-                const wikiIndexMap = {}; // 中文名 -> wikiData中的固定序号
+                // 构建wikiData固定编号映射
+                const wikiIndexMap = {};
                 const wikiKeys = Object.keys(wikiData);
                 wikiKeys.forEach((chineseName, index) => {
-                    wikiIndexMap[chineseName] = index + 1; // 从1开始编号
+                    wikiIndexMap[chineseName] = index + 1;
                 });
 
-                // --- 步骤4: 建立映射字典 ---
+                // 建立映射字典
                 const idToGameName = {};
                 for (let item of mappingList) {
                     idToGameName[item.Name] = item.GameName;
                 }
-
                 const gameNameToInfo = {};
                 for (let chineseName in wikiData) {
                     const data = wikiData[chineseName];
@@ -672,26 +728,19 @@ function ml(e) {
                     };
                 }
 
-                // --- 步骤5: 筛选出未解锁的怪物，并赋予固定wiki编号 ---
+                // 筛选出未解锁的怪物
                 const unlockedMonsters = [];
-                for (let i = 0; i < enemyList.length; i++) {
-                    const enemy = enemyList[i];
+                for (let enemy of enemyList) {
                     const saveId = enemy.Name;
                     const kills = enemy.Record?.Kills || 0;
-
                     const officialName = idToGameName[saveId];
                     if (!officialName) continue;
-
                     const info = gameNameToInfo[officialName];
                     if (!info) continue;
-
                     const remaining = info.requirement - kills;
                     if (remaining > 0) {
-                        // 核心：从wikiIndexMap获取固定编号
-                        const fixedWikiIndex = wikiIndexMap[info.chineseName];
-                        
                         unlockedMonsters.push({
-                            固定编号: fixedWikiIndex, // 使用固定编号
+                            固定编号: wikiIndexMap[info.chineseName],
                             中文名: info.chineseName,
                             官方英文: officialName,
                             存档英文: saveId,
@@ -701,20 +750,18 @@ function ml(e) {
                         });
                     }
                 }
-
-                // --- 步骤6: 按固定编号排序 ---
+                
                 unlockedMonsters.sort((a, b) => a.固定编号 - b.固定编号);
-                // ==== 核心修改结束 ====
-
                 currentResult = unlockedMonsters;
+                lastModifiedTime = file.lastModified;
+                updateFileInfoDisplay(file.name, file.lastModified);
 
-                // --- 步骤7: 显示结果 ---
                 if (currentResult.length === 0) {
                     showError('恭喜！所有怪物均已解锁。');
                 } else {
                     displayResult(currentResult);
                 }
-                
+
             } catch (e) {
                 showError('处理文件时出错：' + e.message);
                 console.error(e);
@@ -723,16 +770,14 @@ function ml(e) {
             }
         }
 
-        // ========== 显示结果 ==========
-        // ========== 显示结果 ==========
+        // ===== 显示结果 =====
         function displayResult(result) {
             stats.innerHTML = `共找到 <strong>${result.length}</strong> 个未解锁怪物`;
-            
             resultBody.innerHTML = '';
             for (let r of result) {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${r.固定编号}</td> <!-- 改为固定编号 -->
+                    <td>${r.固定编号}</td>
                     <td>${r.中文名}</td>
                     <td>${r.官方英文}</td>
                     <td><code>${r.存档英文}</code></td>
@@ -742,25 +787,22 @@ function ml(e) {
                 `;
                 resultBody.appendChild(row);
             }
-            
             resultArea.style.display = 'block';
         }
 
-        // ========== 显示错误 ==========
+        // ===== 显示错误 =====
         function showError(msg) {
             errorDiv.textContent = msg;
             errorDiv.style.display = 'block';
         }
 
-        // ========== 下载结果 ==========
-       downloadBtn.addEventListener('click', () => {
+        // ===== 下载结果 =====
+        downloadBtn.addEventListener('click', () => {
             if (currentResult.length === 0) return;
-            
             let content = '固定编号\t中文名\t官方英文名\t存档英文ID\t当前击杀\t所需击杀\t还差\n';
             for (let r of currentResult) {
                 content += `${r.固定编号}\t${r.中文名}\t${r.官方英文}\t${r.存档英文}\t${r.当前击杀}\t${r.所需击杀}\t${r.还差}\n`;
             }
-            
             const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -770,28 +812,201 @@ function ml(e) {
             URL.revokeObjectURL(url);
         });
 
-        // ========== 事件监听 ==========
-        dropZone.addEventListener('click', () => fileInput.click());
-        
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
+        // ===== 自动刷新核心功能 =====
+        function initializeAutoRefreshUI() {
+            const isModernBrowser = 'showOpenFilePicker' in window;
+            let controlsHTML = '';
 
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
+            if (isModernBrowser) {
+                controlsHTML = `
+                    <div class="divider"><span>或</span></div>
+                    <div class="hint-box info">
+                        <strong>✨ 自动刷新功能</strong><br>
+                        点击下方按钮选择存档文件，工具将每隔10秒自动检查更新。<br>
+                        <small>游戏坐椅子保存后，数据会自动刷新。</small>
+                    </div>
+                    <button class="control-btn" id="pickFileBtn">📁 选择存档文件并开启监控</button>
+                    <button class="control-btn stop" id="stopRefreshBtn" style="display:none;">⏸️ 停止自动刷新</button>
+                `;
+            } else {
+                controlsHTML = `
+                    <div class="divider"><span>浏览器限制</span></div>
+                    <div class="hint-box warning">
+                        <strong>⚠️ 自动刷新不可用</strong><br>
+                        当前浏览器不支持此功能（Chrome 86+、Edge 90+ 支持）。<br>
+                        <small>您仍可拖拽文件分析，但存档更新后需要手动重新拖入。</small>
+                    </div>
+                `;
+            }
+            autoRefreshControls.innerHTML = controlsHTML;
 
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file) processFile(file);
-        });
+            // 为现代浏览器绑定按钮事件
+            if (isModernBrowser) {
+                bindAutoRefreshEvents();
+            }
+        }
 
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) processFile(file);
+        function bindAutoRefreshEvents() {
+            const pickBtn = document.getElementById('pickFileBtn');
+            const stopBtn = document.getElementById('stopRefreshBtn');
+            
+            if (!pickBtn || !stopBtn) {
+                console.warn('自动刷新按钮未找到，稍后重试...');
+                setTimeout(bindAutoRefreshEvents, 100);
+                return;
+            }
+
+            // 移除可能存在的旧监听器（防止重复绑定）
+            pickBtn.replaceWith(pickBtn.cloneNode(true));
+            stopBtn.replaceWith(stopBtn.cloneNode(true));
+            
+            // 重新获取元素引用
+            const newPickBtn = document.getElementById('pickFileBtn');
+            const newStopBtn = document.getElementById('stopRefreshBtn');
+
+            // 绑定“选择文件”按钮事件
+            newPickBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try {
+                    [fileHandle] = await window.showOpenFilePicker({
+                        types: [{
+                            description: '丝之歌存档文件',
+                            accept: { 'application/octet-stream': ['.dat'] }
+                        }],
+                        multiple: false
+                    });
+                    await startAutoRefresh();
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        showError('无法访问文件：' + err.message);
+                    }
+                }
+            });
+
+            // 绑定“停止监控”按钮事件
+            newStopBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                stopAutoRefresh();
+                showError('自动刷新已停止。');
+            });
+        }
+
+        async function startAutoRefresh() {
+            if (!fileHandle) return;
+            
+            try {
+                const file = await fileHandle.getFile();
+                await processFile(file);
+                
+                // 显示停止按钮，隐藏开始按钮
+                document.getElementById('pickFileBtn').style.display = 'none';
+                document.getElementById('stopRefreshBtn').style.display = 'inline-block';
+
+                // 启动轮询检查
+                refreshTimer = setInterval(async () => {
+                    if (document.visibilityState === 'visible') {
+                        await checkForUpdates();
+                    }
+                }, 10000);
+                
+                console.log('自动刷新已启动，每10秒检查一次。');
+
+            } catch (err) {
+                console.error('启动自动刷新失败:', err);
+                showError('启动监控失败：' + err.message);
+                stopAutoRefresh();
+            }
+        }
+
+        async function checkForUpdates() {
+            if (!fileHandle) return;
+            
+            try {
+                const newFile = await fileHandle.getFile();
+                if (newFile.lastModified > lastModifiedTime) {
+                    console.log('检测到存档更新，自动刷新数据...');
+                    lastModifiedTime = newFile.lastModified;
+                    await processFile(newFile);
+                    
+                    // 显示更新提示
+                    const statsEl = document.getElementById('stats');
+                    if (statsEl) {
+                        const originalHtml = statsEl.innerHTML;
+                        statsEl.innerHTML = originalHtml + ' <span style="color:#27ae60;">(已更新)</span>';
+                        setTimeout(() => statsEl.innerHTML = originalHtml, 2000);
+                    }
+                }
+            } catch (err) {
+                console.error('检查文件更新失败:', err);
+                showError('自动刷新失败，请重新选择文件。');
+                stopAutoRefresh();
+            }
+        }
+
+        function stopAutoRefresh() {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+            fileHandle = null;
+            const pickBtn = document.getElementById('pickFileBtn');
+            const stopBtn = document.getElementById('stopRefreshBtn');
+            if (pickBtn) pickBtn.style.display = 'inline-block';
+            if (stopBtn) stopBtn.style.display = 'none';
+            updateFileInfoDisplay('', 0);
+        }
+
+        function updateFileInfoDisplay(fileName, lastModified) {
+            if (!fileInfoEl) return;
+            
+            if (fileName && lastModified) {
+                const timeStr = new Date(lastModified).toLocaleTimeString();
+                fileInfoEl.innerHTML = `🔍 监控中: <strong>${fileName}</strong> (最后修改: ${timeStr})`;
+                fileInfoEl.style.color = '#27ae60';
+            } else {
+                fileInfoEl.innerHTML = '📋 未监控任何文件';
+                fileInfoEl.style.color = '#7f8c8d';
+            }
+        }
+
+        // ===== 页面初始化 =====
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeAutoRefreshUI();
+            
+            // 拖拽区域点击事件
+            dropZone.addEventListener('click', (e) => {
+                if (e.target.closest('.controls')) return;
+                fileInput.click();
+            });
+            
+            // 拖拽事件
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    stopAutoRefresh();
+                    processFile(file);
+                }
+            });
+            
+            // 文件选择事件
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    stopAutoRefresh();
+                    processFile(file);
+                }
+            });
         });
     </script>
 </body>
